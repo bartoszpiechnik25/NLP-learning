@@ -177,7 +177,7 @@ class MLM(nn.Module):
         #select target tokens based on mask
         targets = tokens.unsqueeze(-1).masked_select(mask == 0)
         #calculate loss on masked tokens
-        return F.cross_entropy(masked_logits.view(len(targets), -1), targets)
+        return F.cross_entropy(masked_logits.view(len(targets), -1), targets.view(-1), ignore_index=0)
 
 
 class BERT(nn.Module):
@@ -193,6 +193,7 @@ class BERT(nn.Module):
         self.embeddings = BERTEmbeddings(config)
         self.linear = nn.Linear(config.hidden_layers, config.hidden_layers)
         self.mlm = MLM(config)
+        self.apply(self._init_weights)
     
     def forward(self,
                 tokens: torch.Tensor,
@@ -208,7 +209,7 @@ class BERT(nn.Module):
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: Logits, loss on MLM task.
         """
-        x = self.embeddings(tokens)
+        x = self.embeddings(tokens, attention_mask)
         for block in self.blocks:
             x = block(x)
         logits = self.linear(x)
@@ -216,4 +217,35 @@ class BERT(nn.Module):
         if targets is not None:
             mlm_loss = self.mlm.forward(logits, attention_mask, targets)
         return logits, mlm_loss
+    
+    def training_step(self,
+                optimizer: torch.optim.Optimizer, 
+                tokens: torch.Tensor,
+                attention_mask: torch.Tensor=None,
+                targets: torch.Tensor=None) -> int:
+        """Function performing forward and backward pass for a batch.
+
+        Args:
+            optimizer (torch.optim.Optimizer): Optimizer that is optimizing neural net.
+            tokens (torch.Tensor): Tokenized input data.
+            attention_mask (torch.Tensor, optional): Mask to be applied to self attention layers. Defaults to None.
+            targets (torch.Tensor, optional): Real values for each token. Defaults to None.
+
+        Returns:
+            int: Batch loss.
+        """
+        _, loss = self.forward(tokens, attention_mask, targets)
+        self.zero_grad(True)
+        loss.backward()
+        optimizer.step()
+        return loss.item()
+    
+    def _init_weights(self, module: nn.Module) -> None:
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.15)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.15)
+
         

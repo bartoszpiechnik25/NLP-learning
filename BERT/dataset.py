@@ -24,7 +24,7 @@ class WikiTextDataset(Dataset):
         for i in range(len(data)):
             self.data.extend(self.splitText(data[i]['text']))
         
-        vocab_idxs = torch.ones((self.tokenizer.vocab_size,))
+        vocab_idxs = torch.ones((tok.vocab_size,))
         #zero out sepcial tokens
         vocab_idxs[0:1996] = 0
         #length of valid, litteral tokens
@@ -87,7 +87,7 @@ class WikiTextDataset(Dataset):
         #update mask returned from tokenizer
         mask = att_mask.masked_fill(selected != 0, 0)
         
-        return x.unsqueeze(0), mask.unsqueeze(0), tokens.unsqueeze(0)
+        return x, mask, tokens
     
     def __getitem__(self, idx: int) -> Dict[torch.Tensor, torch.Tensor]:
         
